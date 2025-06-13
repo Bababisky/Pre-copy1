@@ -117,20 +117,53 @@ app.post("/register", function (req, res) {
 
 
 //-----Login-----//
+// app.post("/login", function (req, res) {
+//     const username = req.body.username;
+//     const password = req.body.password;
+
+//     const sql = "SELECT userid, username, role, department, useremail, phonenum FROM user WHERE username = ? AND password = ?";
+
+//     con.query(sql, [username, password], function (err, results) {
+//         if (err) {
+//             console.error("Database error:", err);
+//             return res.status(500).send("Database error!!");
+//         }
+
+//         if (results.length !== 1) {
+//             return res.status(401).send("Wrong username or password!!");
+//         }
+
+//         const user = results[0];
+//         console.log("Login successful. User data:", user);
+
+//         res.json({
+//             success: true,
+//             username: user.username,
+//             userid: user.userid,
+//             department: user.department || "Undefined", // ส่งค่า department
+//             useremail: user.useremail,
+//             phonenum: user.phonenum
+//         });
+//     });
+// });
 app.post("/login", function (req, res) {
-    const username = req.body.username;
+    const identifier = req.body.username; // อาจเป็น username หรือ email
     const password = req.body.password;
 
-    const sql = "SELECT userid, username, role, department, useremail, phonenum FROM user WHERE username = ? AND password = ?";
+    const sql = `
+        SELECT userid, username, role, department, useremail, phonenum
+        FROM user
+        WHERE (username = ? OR useremail = ?) AND password = ?
+    `;
 
-    con.query(sql, [username, password], function (err, results) {
+    con.query(sql, [identifier, identifier, password], function (err, results) {
         if (err) {
             console.error("Database error:", err);
             return res.status(500).send("Database error!!");
         }
 
         if (results.length !== 1) {
-            return res.status(401).send("Wrong username or password!!");
+            return res.status(401).send("Wrong username/email or password!!");
         }
 
         const user = results[0];
@@ -140,7 +173,7 @@ app.post("/login", function (req, res) {
             success: true,
             username: user.username,
             userid: user.userid,
-            department: user.department || "Undefined", // ส่งค่า department
+            department: user.department || "Undefined",
             useremail: user.useremail,
             phonenum: user.phonenum
         });
