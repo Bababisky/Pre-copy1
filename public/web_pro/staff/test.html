@@ -371,7 +371,30 @@
             e.preventDefault();
 
             const formData = new FormData(formAsset);
-            formData.append('Assetstatus', 'Available'); // เพิ่มสถานะเริ่มต้น
+            
+            // เพิ่ม Staffaddid จาก localStorage
+            const userid = localStorage.getItem('userid');
+            if (!userid) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'User ID is missing. Please login again.'
+                });
+                return;
+            }
+            formData.append('Staffaddid', userid);
+            formData.append('Assetstatus', 'Available');
+
+            // ตรวจสอบ Assettype
+            const assetType = formData.get('Assettype');
+            if (!assetType) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Please select an asset type.'
+                });
+                return;
+            }
 
             let url = '/assets';
             let httpMethod = action === 'edit' ? 'PUT' : 'POST';
@@ -385,19 +408,30 @@
                     body: formData
                 });
 
-                if (!response.ok) throw new Error('Failed to save asset.');
+                if (!response.ok) {
+                    const errorData = await response.text();
+                    throw new Error(errorData || 'Failed to save asset.');
+                }
+
                 Swal.fire({
                     icon: 'success',
                     title: 'Success',
                     text: 'Asset saved successfully!'
                 });
+                
+                formAsset.reset();
+                const imagePreview = document.getElementById('imagePreview');
+                imagePreview.src = '';
+                imagePreview.style.display = 'none';
+                
                 getAssets(); // โหลดข้อมูลใหม่
                 assetModal.hide();
             } catch (err) {
+                console.error('Error:', err);
                 Swal.fire({
                     icon: 'error',
                     title: 'Error',
-                    text: err.toString()
+                    text: err.message || 'Failed to save asset. Please try again.'
                 });
             }
         });
@@ -500,61 +534,6 @@
     </script>
 
     <script>
-        formAsset.addEventListener('submit', async function (e) {
-            e.preventDefault();
-            const formData = new FormData(formAsset);
-
-            // เพิ่มข้อมูลเพิ่มเติมใน FormData
-            const userid = localStorage.getItem('userid');
-            if (!userid) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: 'User ID is missing.'
-                });
-                return;
-            }
-            formData.append('Staffaddid', userid);
-            formData.append('Assetstatus', 'Available');
-
-            // กำหนด URL และ HTTP Method ตาม action
-            let url = '/assets';
-            let httpMethod = 'POST'; // ค่าเริ่มต้นคือ POST
-            if (action === 'edit') {
-                url += `/${editID}`; // ใช้ URL สำหรับแก้ไข
-                httpMethod = 'PUT'; // เปลี่ยนเป็น PUT สำหรับการแก้ไข
-            }
-
-            try {
-                const response = await fetch(url, {
-                    method: httpMethod,
-                    body: formData
-                });
-
-                if (!response.ok) throw new Error('Failed to save asset.');
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Success',
-                    text: action === 'edit' ? 'Asset updated successfully!' : 'Asset added successfully!'
-                });
-
-                // ล้างฟอร์มและซ่อนตัวอย่างรูปภาพ
-                formAsset.reset(); // รีเซ็ตฟอร์ม
-                const imagePreview = document.getElementById('imagePreview');
-                imagePreview.src = '';
-                imagePreview.style.display = 'none';
-
-                getAssets(); // โหลดข้อมูลใหม่
-                assetModal.hide(); // ปิด modal
-            } catch (err) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: err.toString()
-                });
-            }
-        });
-
         function previewImage(event) {
             const input = event.target;
             const imagePreview = document.getElementById('imagePreview');
@@ -587,18 +566,45 @@
     <script>
         function loadAssetTypes() {
             fetch('/asset-types')
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch asset types');
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     const dropdown = document.getElementById('assetTypeDropdown');
+                    if (!dropdown) {
+                        console.error('Dropdown element not found');
+                        return;
+                    }
                     dropdown.innerHTML = ''; // Clear existing options
-                    data.forEach(type => {
-                        const option = document.createElement('option');
-                        option.value = type.asset_type_name;
-                        option.textContent = type.asset_type_name;
-                        dropdown.appendChild(option);
-                    });
+                    
+                    // Add default option
+                    const defaultOption = document.createElement('option');
+                    defaultOption.value = '';
+                    defaultOption.textContent = '-- Select Asset Type --';
+                    dropdown.appendChild(defaultOption);
+
+                    if (data && data.length > 0) {
+                        data.forEach(type => {
+                            const option = document.createElement('option');
+                            option.value = type.asset_type_name;
+                            option.textContent = type.asset_type_name;
+                            dropdown.appendChild(option);
+                        });
+                    } else {
+                        console.log('No asset types found');
+                    }
                 })
-                .catch(err => console.error('Failed to load asset types:', err));
+                .catch(err => {
+                    console.error('Failed to load asset types:', err);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Failed to load asset types. Please try again.'
+                    });
+                });
         }
 
         function showAddTypeModal() {
@@ -610,7 +616,11 @@
             const newType = document.getElementById('newTypeInput').value.trim();
 
             if (!newType) {
-                alert('Please enter a valid asset type.');
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Please enter a valid asset type.'
+                });
                 return;
             }
 
@@ -626,16 +636,25 @@
                     return response.json();
                 })
                 .then(() => {
-                    alert('Asset type added successfully!');
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success',
+                        text: 'Asset type added successfully!'
+                    });
                     document.getElementById('newTypeInput').value = '';
                     loadAssetTypes(); // Refresh the dropdown
                     const modal = bootstrap.Modal.getInstance(document.getElementById('addTypeModal'));
                     modal.hide();
                 })
-                .catch(err => console.error('Error adding asset type:', err.message));
+                .catch(err => {
+                    console.error('Error adding asset type:', err);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Failed to add asset type. Please try again.'
+                    });
+                });
         }
-
-
 
         // Load asset types on page load
         document.addEventListener('DOMContentLoaded', loadAssetTypes);

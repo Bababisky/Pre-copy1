@@ -438,8 +438,8 @@ const upload = multer({
 // Route สำหรับเพิ่มสินทรัพย์
 app.post('/assets', upload.single('Assetimg'), (req, res) => {
     console.log('--- Request Received ---');
-    console.log('File:', req.file); // แสดงข้อมูลของไฟล์ที่อัพโหลด
-    console.log('Body:', req.body); // แสดงข้อมูลที่ส่งมาในฟอร์ม
+    console.log('File:', req.file);
+    console.log('Body:', req.body);
 
     const { Assetname, Assetdetail, Assetcode, Assetlocation, Staffaddid, Assetstatus, Assettype } = req.body;
     const Assetimg = req.file ? req.file.filename : null;
@@ -449,23 +449,62 @@ app.post('/assets', upload.single('Assetimg'), (req, res) => {
         console.error('Missing required fields:', {
             Assetname, Assetdetail, Assetcode, Assetlocation, Staffaddid, Assetstatus, Assettype
         });
-        return res.status(400).send('Missing required fields');
+        return res.status(400).json({
+            success: false,
+            message: 'Missing required fields',
+            missingFields: {
+                Assetname: !Assetname,
+                Assetdetail: !Assetdetail,
+                Assetcode: !Assetcode,
+                Assetlocation: !Assetlocation,
+                Staffaddid: !Staffaddid,
+                Assetstatus: !Assetstatus,
+                Assettype: !Assettype
+            }
+        });
     }
 
-    // SQL Query สำหรับเพิ่มข้อมูล
-    const sqlInsert = `
-        INSERT INTO asset (Assetname, Assetdetail, Assetcode, Assetlocation, Assetimg, Staffaddid, Assetstatus, Assettype) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    // ใส่ค่าลงใน query
-    con.query(sqlInsert, [Assetname, Assetdetail, Assetcode, Assetlocation, Assetimg, Staffaddid, Assetstatus, Assettype], (err, result) => {
-        if (err) {
-            console.error('Database error during insertion:', err);
-            return res.status(500).send('Database error during the insertion!!');
+    // ตรวจสอบว่า asset type มีอยู่ในฐานข้อมูลหรือไม่
+    const checkTypeSql = "SELECT asset_type_name FROM asset_type WHERE asset_type_name = ?";
+    con.query(checkTypeSql, [Assettype], (typeErr, typeResults) => {
+        if (typeErr) {
+            console.error('Error checking asset type:', typeErr);
+            return res.status(500).json({
+                success: false,
+                message: 'Error checking asset type'
+            });
         }
-        console.log('Database insertion success:', result);
-        res.status(201).json({ success: true, message: 'Asset added successfully', insertId: result.insertId });
+
+        if (typeResults.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid asset type'
+            });
+        }
+
+        // SQL Query สำหรับเพิ่มข้อมูล
+        const sqlInsert = `
+            INSERT INTO asset (Assetname, Assetdetail, Assetcode, Assetlocation, Assetimg, Staffaddid, Assetstatus, Assettype) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        // ใส่ค่าลงใน query
+        con.query(sqlInsert, [Assetname, Assetdetail, Assetcode, Assetlocation, Assetimg, Staffaddid, Assetstatus, Assettype], (err, result) => {
+            if (err) {
+                console.error('Database error during insertion:', err);
+                return res.status(500).json({
+                    success: false,
+                    message: 'Database error during insertion',
+                    error: err.message
+                });
+            }
+            console.log('Database insertion success:', result);
+            res.status(201).json({
+                success: true,
+                message: 'Asset added successfully',
+                insertId: result.insertId
+            });
+        });
     });
 });
 
